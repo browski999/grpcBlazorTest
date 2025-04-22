@@ -1,0 +1,114 @@
+﻿@page "/GrpcDemo"
+@rendermode InteractiveServer
+@inject GrpcConnect.Greeter.GreeterClient greeterClient
+@using Grpc.Core;
+@using GrpcConnect
+@using System.Threading.Channels
+
+<h3>Grpc Bi-Directional Stream Demo</h3>
+
+<p>
+	<button class="btn btn-primary" @onclick="SendName">Send</button>
+</p>>
+
+<ul>
+	@foreach (var message in Messages)
+	{
+		<li>@message</li>
+	}
+</ul>
+
+@code {
+
+	private List<string> Messages = new();
+	private AsyncDuplexStreamingCall<HelloRequest, HelloReply>? call;
+	private CancellationTokenSource? cts;	
+
+	private async Task SendName()
+	{
+		cts = new CancellationTokenSource();
+		call = greeterClient.SayHelloBiStream(cancellationToken: cts.Token);		
+		cts.CancelAfter(TimeSpan.FromSeconds(10));
+
+		var inputChannel = Channel.CreateUnbounded<string>();
+
+		_ = Task.Run(async () =>
+		{
+			var names = new[] { "Liam", "Bob", "Alice", "Denver", "Kevin", "Matthew" };
+
+			try
+			{
+				foreach (var name in names)
+				{
+					await Task.Delay(1000);
+					await inputChannel.Writer.WriteAsync(name, cts.Token);
+				}
+
+				inputChannel.Writer.Complete();
+			}
+			catch (TaskCanceledException ex)
+			{
+				Console.WriteLine($"Task was canceled: {ex.Message}");
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error: {ex.Message}");
+			}
+		});
+
+		var sendTask = Task.Run(async () =>
+		{
+			try
+			{
+				await foreach (var name in inputChannel.Reader.ReadAllAsync(cts.Token))
+				{
+					var request = new HelloRequest { Name = name };
+					await call.RequestStream.WriteAsync(request, cts.Token);
+				}
+
+				await call.RequestStream.CompleteAsync();
+			}
+			catch (TaskCanceledException ex)
+			{
+				Console.WriteLine($"Task was canceled: {ex.Message}");
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error: {ex.Message}");
+			}
+		});
+
+		var receiveTask = Task.Run(async () =>
+		{
+			try
+			{
+				await foreach (var reply in call.ResponseStream.ReadAllAsync(cts.Token))
+				{
+					await InvokeAsync(() =>
+					{
+						Messages.Add(reply.Message);
+						StateHasChanged();
+					});
+				}
+			}
+			catch (TaskCanceledException ex)
+			{
+				Console.WriteLine($"Task was canceled: {ex.Message}");
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error: {ex.Message}");
+			}
+		});
+	}
+
+	public async ValueTask DisposeAsync()
+	{
+		if (call != null)
+		{
+			await call.RequestStream.CompleteAsync();
+			cts?.Cancel();
+			cts?.Dispose();
+		}
+	}
+}
