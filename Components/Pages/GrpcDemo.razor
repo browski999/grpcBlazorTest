@@ -27,7 +27,7 @@
 	private async Task SendName()
 	{
 		cts = new CancellationTokenSource();
-		call = greeterClient.SayHelloBiStream(cancellationToken: cts.Token);		
+		using var call = greeterClient.SayHelloBiStreamAsync(cancellationToken: cts.Token);
 		cts.CancelAfter(TimeSpan.FromSeconds(10));
 
 		var inputChannel = Channel.CreateUnbounded<string>();
@@ -56,28 +56,7 @@
 			}
 		});
 
-		var sendTask = Task.Run(async () =>
-		{
-			try
-			{
-				await foreach (var name in inputChannel.Reader.ReadAllAsync(cts.Token))
-				{
-					var request = new HelloRequest { Name = name };
-					await call.RequestStream.WriteAsync(request, cts.Token);
-				}
-
-				await call.RequestStream.CompleteAsync();
-			}
-			catch (TaskCanceledException ex)
-			{
-				Console.WriteLine($"Task was canceled: {ex.Message}");
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine($"Error: {ex.Message}");
-			}
-		});
-
+		//Tasks to receive replies from the server
 		var receiveTask = Task.Run(async () =>
 		{
 			try
@@ -100,6 +79,30 @@
 				Console.WriteLine($"Error: {ex.Message}");
 			}
 		});
+
+		//Tasks to send messages to the server
+		var sendTask = Task.Run(async () =>
+		{
+			try
+			{
+				await foreach (var name in inputChannel.Reader.ReadAllAsync(cts.Token))
+				{
+					var request = new HelloRequest { Name = name };
+					await call.RequestStream.WriteAsync(request, cts.Token);
+				}				
+			}
+			catch (TaskCanceledException ex)
+			{
+				Console.WriteLine($"Task was canceled: {ex.Message}");
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Error: {ex.Message}");
+			}
+		});
+
+		await call.RequestStream.CompleteAsync();
+		await receiveTask;
 	}
 
 	public async ValueTask DisposeAsync()

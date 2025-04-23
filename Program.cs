@@ -18,7 +18,10 @@ builder.Services.AddGrpcClient<Greeter.GreeterClient>(options =>
 {
     options.HttpHandler = new SocketsHttpHandler
     {
-        EnableMultipleHttp2Connections = true
+        EnableMultipleHttp2Connections = true,
+        PooledConnectionIdleTimeout = Timeout.InfiniteTimeSpan,
+        KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+        KeepAlivePingTimeout = TimeSpan.FromSeconds(30)
     };
     options.ServiceProvider = ServiceProvider;
 });
