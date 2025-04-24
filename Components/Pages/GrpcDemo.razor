@@ -89,7 +89,9 @@
 				{
 					var request = new HelloRequest { Name = name };
 					await call.RequestStream.WriteAsync(request, cts.Token);
-				}				
+				}	
+				
+				await call.RequestStream.CompleteAsync();
 			}
 			catch (TaskCanceledException ex)
 			{
@@ -101,7 +103,6 @@
 			}
 		});
 
-		await call.RequestStream.CompleteAsync();
 		await receiveTask;
 	}
 
