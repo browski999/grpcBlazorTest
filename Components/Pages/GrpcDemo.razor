@@ -9,7 +9,7 @@
 
 <p>
 	<button class="btn btn-primary" @onclick="SendName">Send</button>
-</p>>
+</p>
 
 <ul>
 	@foreach (var message in Messages)
@@ -27,7 +27,7 @@
 	private async Task SendName()
 	{
 		cts = new CancellationTokenSource();
-		using var call = greeterClient.SayHelloBiStreamAsync(cancellationToken: cts.Token);
+		call = greeterClient.SayHelloBiStreamAsync(cancellationToken: cts.Token);
 		cts.CancelAfter(TimeSpan.FromSeconds(10));
 
 		var inputChannel = Channel.CreateUnbounded<string>();
@@ -103,7 +103,7 @@
 			}
 		});
 
-		await receiveTask;
+		await Task.WhenAll(sendTask, receiveTask);
 	}
 
 	public async ValueTask DisposeAsync()
